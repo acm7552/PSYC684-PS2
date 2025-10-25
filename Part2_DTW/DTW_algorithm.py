@@ -3,6 +3,7 @@ import math
 import scipy
 # import torchaudio
 import numpy as np
+import argparse
 # import pandas as pd
 
 
@@ -19,6 +20,10 @@ MYSTERY_2 = "mystery2.txt"
 
 # all txt files to loop through and compare dtw distances
 ALL_FILES = [YES_TEMP, YES_VAL, NO_TEMP, NO_VAL, MYSTERY_1, MYSTERY_2]
+
+MYSTERIES = [MYSTERY_1, MYSTERY_2]
+
+TEMPLATES = [YES_TEMP, NO_TEMP]
 
 
 def euclid_dist(template, sample):
@@ -69,15 +74,33 @@ def DTW_matrix(template_file, sample_file):
     return 
 
 
-def main():
+def run_all():
     for file1 in ALL_FILES:
         for file2 in ALL_FILES:
             DTW_matrix(file1, file2)
     return
 
+def run_mystery():
+    for mystery in MYSTERIES:
+        for temp in TEMPLATES:
+            DTW_matrix(mystery, temp)
+    return
 
+
+# added easy args to switch between all files and just the mystery files
 if __name__ == "__main__":
-    main()
+    parser = argparse.ArgumentParser(description="")
+    parser.add_argument("--all", action="store_true", help="Run DTW on all txts, including themselves (expected distance: 0)")
+    parser.add_argument("--mystery", action="store_true", help="Run DTW on mystery files agianst templates")
+    args = parser.parse_args()
+
+    if args.all:
+        run_all()
+    elif args.mystery:
+        run_mystery()
+
+    
+    
 
 
 
