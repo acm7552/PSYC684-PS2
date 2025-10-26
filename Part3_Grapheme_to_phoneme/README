@@ -1,0 +1,20 @@
+This directory contains:
+
+* lett2phon.py
+* trainprons.txt
+* testprons.txt
+* README
+
+You can run the program with no command line arguments, but
+it must be in the same directory as the *prons.txt files.
+The code allows for these files to be indicated instead
+as command-line arguments. Just swap the # where the 
+files are read in.
+
+The pronunciations are adapted from the CMU pronouncing dictionary:
+
+http://www.speech.cs.cmu.edu/cgi-bin/cmudict
+
+This website has links to the dictionary itself along with a 
+list of the phonemes and examples of what they represent.
+It's based on ARPAbet, but as usual, it's not exactly the same.
