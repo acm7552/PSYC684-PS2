@@ -4,7 +4,7 @@ import random
 import sys
 
 # set this to 1 if you want to see more output
-verbose = 1
+verbose = 0
 
 #################################
 #### LETTER-to-PHONEME RULES ####
@@ -15,7 +15,24 @@ verbose = 1
 ## You can add additional likely letter-to-phoneme correspondences here
 ## to improve the alignments from which you derive your mapping rules.
 
-baserules = {'F':'F'}
+# baserules = {'F':'F'}
+
+# Adding some base rules based on the Phoneme set at http://www.speech.cs.cmu.edu/cgi-bin/cmudict:
+# Several ARPAbet consonents appear as only one letter or set of letters.
+# Using this baserules decreases error from .7 to ~.58 by itself which is pretty good. - AM
+baserules = {'B':'B',
+             'D':'D',
+             #'EE': 'IY', an entry like this won't do anything since this only works for single letters. -AM
+             'F':'F',
+             'G':'G',
+             'M':'M',
+             'N':'N',
+             'P':'P',
+             'R':'R',
+             'T':'T',
+             'V':'V', 
+             'Z':['Z','ZH'] # could be Z (as in zee) or ZH (as in seizure). -AM
+             }
 
 ## TO DO ##
 ## Other ideas:
@@ -31,7 +48,6 @@ baserules = {'F':'F'}
 # We will use this set of new mapping rules to
 # to guess the pronunciations of words we haven't seen.
 newrules = {}
-
 
 ##################
 ### FUNCTIONS ####
@@ -56,6 +72,9 @@ def calc_distance(a, b):
     if a in baserules.keys():
         if baserules[a] == b:
             return 0.0
+        # if we put a list in baserules and the phoneme is in it, could return a small value - AM
+        elif b in baserules[a]:
+            return 0.5
         else:
             return 2.0
 
