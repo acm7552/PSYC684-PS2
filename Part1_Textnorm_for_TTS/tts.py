@@ -38,24 +38,26 @@ def google_synthesize_text(input_text, text_file):
 def elevenlabs_synthesize_text(input_text, text_file, key):
     # pip install elevenlabs
     from elevenlabs.client import ElevenLabs
-    from elevenlabs import save
-
+    import wave
+    
     client = ElevenLabs(
         api_key=key
     )
 
     audio = client.text_to_speech.convert(
         text=input_text,
-        voice_id="JBFqnCBsd6RMkjVDRZzb",
+        voice_id="pqHfZKP75CvOlQylNhV4",
         model_id="eleven_turbo_v2_5",
         output_format="pcm_32000",
     )
     
-    save(audio, f"{text_file}_ELEVEN_output.wav")
-    # with open(f"{text_file}_ELEVEN_output.wav", "wb") as f:
-    #     for chunk in audio:
-    #         if chunk:
-    #             f.write(chunk)
+    pcm_bytes = b"".join(audio)
+    # save(audio, f"{text_file}_ELEVEN_output.mp3")
+    with wave.open(f"{text_file}_ELEVEN_output.wav", "wb") as wavf:
+        wavf.setnchannels(1)        # mono
+        wavf.setsampwidth(2)        # 16-bit samples
+        wavf.setframerate(32000)    # 16 kHz sample rate
+        wavf.writeframes(pcm_bytes)
         
 
 def THIRD_TTS_PLACEHOLDER():
