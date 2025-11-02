@@ -15,7 +15,7 @@ verbose = 0
 ## You can add additional likely letter-to-phoneme correspondences here
 ## to improve the alignments from which you derive your mapping rules.
 
-# baserules = {'F':'F'}
+#baserules = {'F':'F'}
 
 # Adding some base rules based on the Phoneme set at http://www.speech.cs.cmu.edu/cgi-bin/cmudict:
 # Several ARPAbet consonents appear as only one letter or set of letters.
@@ -30,7 +30,8 @@ baserules = {'B':'B',
              'P':'P',
              'R':'R',
              'T':'T',
-             'V':'V', 
+             'V':'V',
+             #'Y':['IY', 'Y'], 
              'Z':['Z','ZH'] # could be Z (as in zee) or ZH (as in seizure). -AM
              }
 
@@ -81,7 +82,6 @@ def calc_distance(a, b):
         else:
             return 2.0
         
-    
 
     # Otherwise, it's not clear, so assign a smaller penalty
     else:
