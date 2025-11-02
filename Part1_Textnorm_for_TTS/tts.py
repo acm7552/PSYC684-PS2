@@ -1,9 +1,18 @@
+# must pip install "google-cloud-texttospeech" for this to work 
 from google.cloud import texttospeech
 
+# pip install elevenlabs
+from elevenlabs.client import ElevenLabs
+from elevenlabs import play
+
+# native
 import sys
 
 def google_synthesize_text(input_text, text_file):
-    """Synthesizes speech from the input string of text."""
+    """Synthesizes speech from the input string of text.
+    To set up authentication for Google Cloud, see 
+    Application Default Credentials docs: https://cloud.google.com/docs/authentication/set-up-adc-local-dev-environment?hl=en
+    """
 
     text = input_text
     client = texttospeech.TextToSpeechClient()
@@ -27,24 +36,41 @@ def google_synthesize_text(input_text, text_file):
         audio_config=audio_config,
     )
 
-    output_file = f'{text_file.replace(".txt", "")}_google_output.wav'
     # The response's audio_content is binary.
-    with open(output_file, "wb") as out:
+    with open(f"{text_file}_GOOGLE_output.wav", "wb") as out:
         out.write(response.audio_content)
-        print(f'Audio content written to file "{output_file}"')
+        print(f'Audio content written to file "{text_file}_output.wav"')
         
+def elevenlabs_synthesize_text(input_text, text_file):
+    from elevenlabs.client import ElevenLabs
+    from elevenlabs import save
+
+    client = ElevenLabs(
+        api_key="ask jack for key"
+    )
+
+    audio = client.text_to_speech.convert(
+        text=input_text,
+        voice_id="JBFqnCBsd6RMkjVDRZzb",
+        model_id="eleven_turbo_v2_5",
+        output_format="pcm_32000",
+    )
+    
+    # save(audio, f"{text_file}_ELEVEN_output.wav")
+    with open(f"{text_file}_ELEVEN_output.wav", "wb") as f:
+        for chunk in audio:
+            if chunk:
+                f.write(chunk)
         
-def azure_synthesize_text(input_text):
-    pass
 
-
-def amazon_synthesize_text(input_text):
+def THIRD_TTS_PLACEHOLDER():
+    """Call third commercial TTS API and save output."""
     pass
 
 
 def main():
     if len(sys.argv) != 3:
-        print("Usage: python script.py <text_file.txt> <cloud_service>")
+        print("Usage: python script.py <text_file.txt> <google | eleven | third option> [optional API key]")
         sys.exit(1)
 
     # read args
@@ -59,10 +85,10 @@ def main():
     # choose api
     if cloud_service == "google":
         google_synthesize_text(input_text, text_file)
-    elif cloud_service == "__":
-        azure_synthesize_text(input_text, text_file)
-    elif cloud_service == "____":
-        amazon_synthesize_text(input_text, text_file)
+    elif cloud_service == "eleven":
+        elevenlabs_synthesize_text(input_text, text_file, sys.argv[3])
+    elif cloud_service == "placeholder":
+        return
 
 
 if __name__=="__main__":
