@@ -1,10 +1,3 @@
-# must pip install "google-cloud-texttospeech" for this to work 
-from google.cloud import texttospeech
-
-# pip install elevenlabs
-from elevenlabs.client import ElevenLabs
-from elevenlabs import play
-
 # native
 import sys
 
@@ -13,7 +6,8 @@ def google_synthesize_text(input_text, text_file):
     To set up authentication for Google Cloud, see 
     Application Default Credentials docs: https://cloud.google.com/docs/authentication/set-up-adc-local-dev-environment?hl=en
     """
-
+    # must pip install "google-cloud-texttospeech" for this to work 
+    from google.cloud import texttospeech
     text = input_text
     client = texttospeech.TextToSpeechClient()
 
@@ -41,12 +35,13 @@ def google_synthesize_text(input_text, text_file):
         out.write(response.audio_content)
         print(f'Audio content written to file "{text_file}_output.wav"')
         
-def elevenlabs_synthesize_text(input_text, text_file):
+def elevenlabs_synthesize_text(input_text, text_file, key):
+    # pip install elevenlabs
     from elevenlabs.client import ElevenLabs
     from elevenlabs import save
 
     client = ElevenLabs(
-        api_key="ask jack for key"
+        api_key=key
     )
 
     audio = client.text_to_speech.convert(
@@ -56,11 +51,11 @@ def elevenlabs_synthesize_text(input_text, text_file):
         output_format="pcm_32000",
     )
     
-    # save(audio, f"{text_file}_ELEVEN_output.wav")
-    with open(f"{text_file}_ELEVEN_output.wav", "wb") as f:
-        for chunk in audio:
-            if chunk:
-                f.write(chunk)
+    save(audio, f"{text_file}_ELEVEN_output.wav")
+    # with open(f"{text_file}_ELEVEN_output.wav", "wb") as f:
+    #     for chunk in audio:
+    #         if chunk:
+    #             f.write(chunk)
         
 
 def THIRD_TTS_PLACEHOLDER():
@@ -69,7 +64,7 @@ def THIRD_TTS_PLACEHOLDER():
 
 
 def main():
-    if len(sys.argv) != 3:
+    if len(sys.argv) != 4:
         print("Usage: python script.py <text_file.txt> <google | eleven | third option> [optional API key]")
         sys.exit(1)
 
