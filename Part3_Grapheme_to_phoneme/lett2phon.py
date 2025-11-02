@@ -19,8 +19,9 @@ verbose = 0
 
 # Adding some base rules based on the Phoneme set at http://www.speech.cs.cmu.edu/cgi-bin/cmudict:
 # Several ARPAbet consonents appear as only one letter or set of letters.
-# Using this baserules decreases error from .7 to around ~.58 by itself which is pretty good. - AM
-baserules = {'B':'B',
+# Using this baserules decreases error from .7 to around ~.55 by itself which is pretty good. - AM
+baserules = {   
+             'B':'B',
              'D':'D',
              #'EE': 'IY', an entry like this won't do anything since this only works for single letters. -AM
              'F':'F',
@@ -31,9 +32,16 @@ baserules = {'B':'B',
              'R':'R',
              'T':'T',
              'V':'V',
-             #'Y':['IY', 'Y'], 
-             'Z':['Z','ZH'] # could be Z (as in zee) or ZH (as in seizure). -AM
+             'Z':['Z','ZH'], # could be Z (as in zee) or ZH (as in seizure). -AM
+            # may want to avoid using vowels, since it makes lots of assumptions we'd otherwise like to learn - AM.
+            # did not help error. - AM
+            #  'A': ['AE', 'AH', 'EY'],
+            #  'E': ['EH', 'IY'],
+            #  'I': ['IH', 'AY'],
+            #  'O': ['OW', 'AO', 'AA'],
+            #  'U': ['UW', 'AH', 'Y UW']
              }
+
 
 ## TO DO ##
 ## Other ideas:
@@ -82,7 +90,14 @@ def calc_distance(a, b):
         else:
             return 2.0
         
-
+    # do the same for the trained rules, but even lower distances since these were learned, not assumed. - AM
+    elif a in newrules.keys():
+        if newrules[a] == b:
+            return 0.0
+        elif b in newrules[a]:
+            return 0.25
+        else:
+            return 1.0  
     # Otherwise, it's not clear, so assign a smaller penalty
     else:
         return 1.0
@@ -279,7 +294,13 @@ for line in f:
         counter += 1
         guess = ""
         for lett in word:
-            possibles = newrules[lett]
+            # instead of only pulling from learned rules, we can rely on some assumed ones first because we trust those - AM
+            if lett in baserules.keys():
+                possibles = baserules[lett]
+            else:
+                # otherwise, just use the learned rules. - AM
+                possibles = newrules[lett]
+
             r = random.randrange(len(possibles))
             if (possibles[r] != "NULL"):
                 guess = guess + possibles[r] + " "
