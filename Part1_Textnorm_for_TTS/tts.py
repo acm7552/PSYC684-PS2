@@ -27,10 +27,11 @@ def google_synthesize_text(input_text, text_file):
         audio_config=audio_config,
     )
 
+    output_file = f'{text_file.replace(".txt", "")}_google_output.wav'
     # The response's audio_content is binary.
-    with open(f"{text_file}_output.wav", "wb") as out:
+    with open(output_file, "wb") as out:
         out.write(response.audio_content)
-        print(f'Audio content written to file "{text_file}_output.wav"')
+        print(f'Audio content written to file "{output_file}"')
         
         
 def azure_synthesize_text(input_text):
