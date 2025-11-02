@@ -1,11 +1,7 @@
 import os
-import math
 import scipy
-# import torchaudio
 import numpy as np
 import argparse
-# import pandas as pd
-
 
 
 # directory and file names
@@ -24,6 +20,12 @@ ALL_FILES = [YES_TEMP, YES_VAL, NO_TEMP, NO_VAL, MYSTERY_1, MYSTERY_2]
 MYSTERIES = [MYSTERY_1, MYSTERY_2]
 
 TEMPLATES = [YES_TEMP, NO_TEMP]
+
+VALIDATIONS = [YES_VAL, NO_VAL]
+
+YESSES = [YES_TEMP, YES_VAL]
+
+NOS = [NO_TEMP, NO_VAL]
 
 
 def euclid_dist(template, sample):
@@ -98,6 +100,8 @@ if __name__ == "__main__":
         run_all()
     elif args.mystery:
         run_mystery()
+    
+       
 
     
     

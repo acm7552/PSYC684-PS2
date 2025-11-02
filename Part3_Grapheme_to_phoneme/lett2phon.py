@@ -15,11 +15,11 @@ verbose = 0
 ## You can add additional likely letter-to-phoneme correspondences here
 ## to improve the alignments from which you derive your mapping rules.
 
-# baserules = {'F':'F'}
+#baserules = {'F':'F'}
 
 # Adding some base rules based on the Phoneme set at http://www.speech.cs.cmu.edu/cgi-bin/cmudict:
 # Several ARPAbet consonents appear as only one letter or set of letters.
-# Using this baserules decreases error from .7 to ~.58 by itself which is pretty good. - AM
+# Using this baserules decreases error from .7 to around ~.58 by itself which is pretty good. - AM
 baserules = {'B':'B',
              'D':'D',
              #'EE': 'IY', an entry like this won't do anything since this only works for single letters. -AM
@@ -30,7 +30,8 @@ baserules = {'B':'B',
              'P':'P',
              'R':'R',
              'T':'T',
-             'V':'V', 
+             'V':'V',
+             #'Y':['IY', 'Y'], 
              'Z':['Z','ZH'] # could be Z (as in zee) or ZH (as in seizure). -AM
              }
 
@@ -40,7 +41,10 @@ baserules = {'B':'B',
 ## set up some conditional rules, e.g., C-> CH before H
 ## To implement these ideas, you will also need to update the calc_distance function!
 
-
+# could be good if there were rules for letter pairs that always result in the given phoneme(s):
+# otherrules = {'EE': 'IY',
+#               'TH': ['DH','TH],
+#   }
 
 # the dict newrules stores the new mappings that your alignment will produce.
 # This will be a dictionary mapping a letter to  a list of possible phonemes.
@@ -77,6 +81,7 @@ def calc_distance(a, b):
             return 0.5
         else:
             return 2.0
+        
 
     # Otherwise, it's not clear, so assign a smaller penalty
     else:
