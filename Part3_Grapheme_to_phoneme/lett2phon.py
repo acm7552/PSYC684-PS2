@@ -43,6 +43,15 @@ baserules = {
              }
 
 
+# instead use it down here for ignoring vowel:consonant pairings - AM
+vowelPhones = {
+    'A': ['AE', 'AH', 'EY'],
+    'E': ['EH', 'IY'],
+    'I': ['IH', 'AY'],
+    'O': ['OW', 'AO', 'AA'],
+    'U': ['UW', 'AH', 'Y UW']
+}
+
 ## TO DO ##
 ## Other ideas:
 ## set up some rules that allow a letter to map to one of several phones
@@ -60,6 +69,46 @@ baserules = {
 # We will use this set of new mapping rules to
 # to guess the pronunciations of words we haven't seen.
 newrules = {}
+
+
+##################
+#### ARPABET #####
+##################
+
+
+# For tracking whether a given letter or phone is a vowel or consonant. - AM
+
+CONSONANTS_ARPABET = [
+    'P', 'B', 'T', 'D', 'K', 'G',
+    'CH', 'JH',
+    'F', 'V',
+    'TH', 'DH',
+    'S', 'Z',
+    'SH', 'ZH',
+    'HH',
+    'M', 'N', 'NG',
+    'L', 'R',
+    'Y', 'W'
+]
+
+VOWELS_ARPABET = [
+    'AA', 'AE', 'AH', 'AO', 'AW', 'AY',
+    'EH', 'ER', 'EY',
+    'IH', 'IY',
+    'OW', 'OY',
+    'UH', 'UW'
+]
+
+CONSONANTS_ENGLISH= list("BCDFGHJKLMNPQRSTVWXYZ")
+
+VOWELS_ENGLISH = list("AEIOU")
+
+# will be useful for filtering unwanted alignments of vowel-consonant or vice versa - AM
+vowels = VOWELS_ARPABET + VOWELS_ENGLISH
+consonants = CONSONANTS_ARPABET + CONSONANTS_ENGLISH
+
+
+
 
 ##################
 ### FUNCTIONS ####
@@ -89,7 +138,6 @@ def calc_distance(a, b):
             return 0.5
         else:
             return 2.0
-        
     # do the same for the trained rules, but even lower distances since these were learned, not assumed. - AM
     elif a in newrules.keys():
         if newrules[a] == b:
@@ -97,7 +145,7 @@ def calc_distance(a, b):
         elif b in newrules[a]:
             return 0.25
         else:
-            return 1.0  
+            return 0.5  
     # Otherwise, it's not clear, so assign a smaller penalty
     else:
         return 1.0
@@ -294,16 +342,34 @@ for line in f:
         counter += 1
         guess = ""
         for lett in word:
+            
             # instead of only pulling from learned rules, we can rely on some assumed ones first because we trust those - AM
             if lett in baserules.keys():
                 possibles = baserules[lett]
+                # r = random.randrange(len(possibles))
+                r = possibles[random.randrange(len(possibles))]
             else:
-                # otherwise, just use the learned rules. - AM
-                possibles = newrules[lett]
+                # otherwise, if we don't have base rules, use the learned rules. - AM
+                possibles = probs.get(lett, {})
+                # could try picking mappings weighted by their probabilities.
+                # error remains around 0.5 with this approach 
+                # r = random.choices(list(possibles.keys()), weights=list(possibles.values()), k=1)[0]
 
-            r = random.randrange(len(possibles))
-            if (possibles[r] != "NULL"):
-                guess = guess + possibles[r] + " "
+                # or get the most likely mapping.
+                # using this approach, error drops down to ~0.39.
+                r = max(possibles, key=possibles.get)
+
+            # tried ignoring vowel:consonant mappings entirely.
+            # this had no visible effect on error. - AM
+
+            # letterIsVowel = lett in VOWELS_ENGLISH
+            # phonIsVowel = r in VOWELS_ARPABET
+
+            # if letterIsVowel and letterIsVowel != phonIsVowel:
+            #     continue
+
+            if (r != "NULL"):
+                guess = guess + r + " "
     
         if verbose == 1:
             print (line),
