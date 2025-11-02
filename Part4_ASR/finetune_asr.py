@@ -1,0 +1,210 @@
+# Harry Hennessy, Jack Mclaughlin, Sophia Caruana, Andrew Murphy
+# PSYC 684
+#
+# This file loads the OpenAI Whisper Large v3 model and the eka-medical-asr-evaluation-dataset, fine-tuning the Whisper model on medical data.
+# Once pre-trained, the model should perform better on ASR tasks involving medical vocabulary
+# Currently configured for training using Torch's Direct ML for AMD GPUs. Instructions are left for converting for NVIDIA usage -H
+from datasets import load_dataset, DatasetDict
+from transformers import (
+    WhisperProcessor,
+    WhisperForConditionalGeneration,
+    Seq2SeqTrainingArguments,
+    Seq2SeqTrainer,
+)
+from peft import LoraConfig, PeftModel
+import torch
+from huggingface_hub import login
+import os
+import evaluate
+import numpy as np
+import torch_directml
+
+# For AMD: Initialize the DirectML device object
+# For NVIDIA: Replace with CUDA
+dml = torch_directml.device()
+
+
+# Define the token and model ID. Replace 'INSERT_HF_TOKEN' with your token after creating HF account and gaining access to eka-medical-asr-evaluation-dataset
+hf_token = 'INSERT_HF_TOKEN'
+model_id = "openai/whisper-large-v3"
+
+
+# Custom Data Collator for ASR Data. Based on transformers DataCollatorSpeechSeq2SeqWithPadding
+class CustomDataCollator:
+    def __init__(self, processor):
+        self.processor = processor
+    
+    def __call__(self, features):
+        # Pad input features (spectrograms)
+        input_features = [{"input_features": feature["input_features"]} for feature in features]
+        batch = self.processor.feature_extractor.pad(input_features, return_tensors="pt")
+
+        # Pad labels (tokens)
+        label_features = [{"input_ids": feature["labels"]} for feature in features]
+        labels_batch = self.processor.tokenizer.pad(label_features, return_tensors="pt")
+
+        # Replace padding with -100 to ignore when computing the loss
+        labels = labels_batch["input_ids"].masked_fill(labels_batch.attention_mask.ne(1), -100)
+
+        # Prevent loss being calculated on the starting token
+        if (labels[:, 0] == self.processor.tokenizer.bos_token_id).all().item():
+            labels = labels[:, 1:]
+
+        batch["labels"] = labels
+
+        return batch
+
+
+# Main block
+if __name__ == '__main__':
+
+    # Authenticate with Hugging Face
+    login(token=hf_token)
+    print("Successfully authenticated with Hugging Face Hub.")
+
+    # Load the dataset
+    raw_dataset = load_dataset("ekacare/eka-medical-asr-evaluation-dataset", 'en')
+
+    # Split the single test split into new train, validation, and test splits.
+    train_val_split = raw_dataset["test"].train_test_split(
+        test_size=0.2,
+        seed=42
+    )
+
+    # Further split the test into validation and final test splits
+    val_test_split = train_val_split["test"].train_test_split(
+        test_size=0.5,
+        seed=42
+    )
+
+    # Create the final DatasetDict with custom splits
+    dataset = DatasetDict({
+        "train": train_val_split["train"],
+        "validation": val_test_split["train"],
+        "test": val_test_split["test"]
+    })
+
+    # Load processor and model
+    processor = WhisperProcessor.from_pretrained(model_id)
+
+    # For AMD: Load model on CPU/default first, then manually move to DML
+    # For NVIDIA: Replace with CUDA implementation
+    model = WhisperForConditionalGeneration.from_pretrained(
+        model_id
+    )
+    model.to(dml)
+
+
+    sampling_rate = 16000
+
+    # Prepare dataset for training
+    def prepare_dataset(batch, processor):
+        # Load audio
+        audio = batch["audio"]
+
+        # Compute log-Mel spectrogram and input features
+        batch["input_features"] = processor.feature_extractor(
+            audio["array"], sampling_rate=audio["sampling_rate"]
+        ).input_features[0]
+
+        # Encode transcripts
+        batch["labels"] = processor.tokenizer(batch["text"]).input_ids
+        return batch
+
+    # Apply preprocessing to all splits concurrently
+    dataset = dataset.map(
+        prepare_dataset,
+        remove_columns=dataset.column_names["train"],
+        num_proc=4,
+        fn_kwargs={"processor": processor}
+    )
+
+    # Configure LoRA
+    lora_config = LoraConfig(
+        r=32,
+        lora_alpha=64,
+        target_modules=["q_proj", "v_proj"],
+        lora_dropout=0.05,
+        bias="none",
+    )
+
+    # Apply LoRA to model
+    model.add_adapter(lora_config)
+
+    # Print trainable parameters
+    trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
+    total_params = sum(p.numel() for p in model.parameters())
+    print(f"Trainable parameters: {trainable_params} \n All parameters: {total_params} \n Trainable %: {100 * trainable_params / total_params:.2f}")
+
+    # Set evaluation metric to Word Error Rate
+    metric = evaluate.load("wer")
+
+    def compute_metrics(pred):
+        pred_ids = pred.predictions
+        label_ids = pred.label_ids
+
+        # Replace placeholders in labels with the pad token ID
+        label_ids[label_ids == -100] = processor.tokenizer.pad_token_id
+
+        # Decode predicted and label IDs
+        pred_str = processor.batch_decode(pred_ids, skip_special_tokens=True)
+        label_str = processor.batch_decode(label_ids, skip_special_tokens=True)
+
+        # Compute word error rate
+        wer = 100 * metric.compute(predictions=pred_str, references=label_str)
+        return {"wer": wer}
+
+    # Training arguments
+    # For NVIDIA: Several arguments can be changed to improve performance
+    training_args = Seq2SeqTrainingArguments(
+        output_dir="./whisper-medical-finetuned",
+        per_device_train_batch_size=8,
+        per_device_eval_batch_size=8,
+        gradient_accumulation_steps=1,
+        learning_rate=1e-5,
+        num_train_epochs=3,
+        logging_steps=50,
+        eval_strategy="steps",
+        eval_steps=200,
+        save_strategy="steps",
+        save_steps=200,
+        do_train=True,
+        do_eval=True,
+        fp16=False, # For NVIDIA: Set to true
+        load_best_model_at_end=True,
+        metric_for_best_model="wer",
+        greater_is_better=False,
+        push_to_hub=False
+    )
+
+    # Initialize trainer and collator
+    data_collator = CustomDataCollator(processor=processor)
+
+    trainer = Seq2SeqTrainer(
+        model=model,
+        args=training_args,
+        compute_metrics=compute_metrics,
+        train_dataset=dataset["train"],
+        eval_dataset=dataset["validation"],
+        data_collator=data_collator,
+    )
+
+    # Perform training
+    trainer.train()
+
+    # Save adapter weights
+    trainer.save_model("./whisper-medical-finetuned-adapter")
+
+    # Load base model fully
+    # For NVIDIA: switch dml to 'auto' (I think)
+    base_model = WhisperForConditionalGeneration.from_pretrained(model_id).to(dml)
+
+    # Load adapter weights
+    lora_model = PeftModel.from_pretrained(base_model, "./whisper-medical-finetuned-adapter")
+
+    # Merge adapter weights into base model for deployment and further evaluation
+    merged_model = lora_model.merge_and_unload()
+    merged_model.save_pretrained("./whisper-medical-merged-model")
+    processor.save_pretrained("./whisper-medical-merged-model")
+
+    print("Fine-tuning complete. Merged model should be saved in: ./whisper-medical-merged-model")
