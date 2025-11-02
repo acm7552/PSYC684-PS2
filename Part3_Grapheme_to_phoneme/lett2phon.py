@@ -351,12 +351,21 @@ for line in f:
             else:
                 # otherwise, if we don't have base rules, use the learned rules. - AM
                 possibles = probs.get(lett, {})
+
                 # could try picking mappings weighted by their probabilities.
-                # error remains around 0.5 with this approach 
-                # r = random.choices(list(possibles.keys()), weights=list(possibles.values()), k=1)[0]
+                # error drops to around 0.44 - 0.45 when the weights are squared.
+                # currWeights = list(possibles.values())
+                # squaredWeights = [w**2 for w in currWeights]
+
+                # renormalize the weights
+                # total = sum(squaredWeights)
+                # if total > 0:
+                #     squaredWeights = [w/total for w in squaredWeights]
+                
+                # r = random.choices(list(possibles.keys()), weights=squaredWeights, k=1)[0]
 
                 # or get the most likely mapping.
-                # using this approach, error drops down to ~0.39.
+                # using this approach, error drops down to ~0.39, but all 10 guesses are the same
                 r = max(possibles, key=possibles.get)
 
             # tried ignoring vowel:consonant mappings entirely.
