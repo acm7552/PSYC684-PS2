@@ -1,5 +1,7 @@
 #!/usr/bin/env python
 
+#This file is used to generate the no_rec.txt and the yes_rec.txt files used in the DTW_algorithm final.py. 
+
 from python_speech_features import mfcc
 from python_speech_features import delta
 from python_speech_features import logfbank
