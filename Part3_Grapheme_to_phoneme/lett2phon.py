@@ -32,6 +32,7 @@ baserules = {
              'R':'R',
              'T':'T',
              'V':'V',
+             'W':'W',
              'Z':['Z','ZH'], # could be Z (as in zee) or ZH (as in seizure). -AM
             # may want to avoid using vowels, since it makes lots of assumptions we'd otherwise like to learn - AM.
             # did not help error. - AM
@@ -145,7 +146,7 @@ def calc_distance(a, b):
         elif b in newrules[a]:
             return 0.25
         else:
-            return 0.5  
+            return 2.0
     # Otherwise, it's not clear, so assign a smaller penalty
     else:
         return 1.0
@@ -338,7 +339,7 @@ for line in f:
     pron = parts[1]
 
     # make ten guesses for every input word
-    while counter < 10:
+    while counter < 1:
         counter += 1
         guess = ""
         for lett in word:
@@ -360,7 +361,7 @@ for line in f:
                 # renormalize the weights
                 # total = sum(squaredWeights)
                 # if total > 0:
-                #     squaredWeights = [w/total for w in squaredWeights]
+                #      squaredWeights = [w/total for w in squaredWeights]
                 
                 # r = random.choices(list(possibles.keys()), weights=squaredWeights, k=1)[0]
 
