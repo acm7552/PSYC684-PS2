@@ -32,6 +32,7 @@ baserules = {
              'R':'R',
              'T':'T',
              'V':'V',
+             'W':'W',
              'Z':['Z','ZH'], # could be Z (as in zee) or ZH (as in seizure). -AM
             # may want to avoid using vowels, since it makes lots of assumptions we'd otherwise like to learn - AM.
             # did not help error. - AM
@@ -42,6 +43,15 @@ baserules = {
             #  'U': ['UW', 'AH', 'Y UW']
              }
 
+
+# instead use it down here for ignoring vowel:consonant pairings - AM
+vowelPhones = {
+    'A': ['AE', 'AH', 'EY'],
+    'E': ['EH', 'IY'],
+    'I': ['IH', 'AY'],
+    'O': ['OW', 'AO', 'AA'],
+    'U': ['UW', 'AH', 'Y UW']
+}
 
 ## TO DO ##
 ## Other ideas:
@@ -60,6 +70,46 @@ baserules = {
 # We will use this set of new mapping rules to
 # to guess the pronunciations of words we haven't seen.
 newrules = {}
+
+
+##################
+#### ARPABET #####
+##################
+
+
+# For tracking whether a given letter or phone is a vowel or consonant. - AM
+
+CONSONANTS_ARPABET = [
+    'P', 'B', 'T', 'D', 'K', 'G',
+    'CH', 'JH',
+    'F', 'V',
+    'TH', 'DH',
+    'S', 'Z',
+    'SH', 'ZH',
+    'HH',
+    'M', 'N', 'NG',
+    'L', 'R',
+    'Y', 'W'
+]
+
+VOWELS_ARPABET = [
+    'AA', 'AE', 'AH', 'AO', 'AW', 'AY',
+    'EH', 'ER', 'EY',
+    'IH', 'IY',
+    'OW', 'OY',
+    'UH', 'UW'
+]
+
+CONSONANTS_ENGLISH= list("BCDFGHJKLMNPQRSTVWXYZ")
+
+VOWELS_ENGLISH = list("AEIOU")
+
+# will be useful for filtering unwanted alignments of vowel-consonant or vice versa - AM
+vowels = VOWELS_ARPABET + VOWELS_ENGLISH
+consonants = CONSONANTS_ARPABET + CONSONANTS_ENGLISH
+
+
+
 
 ##################
 ### FUNCTIONS ####
@@ -89,7 +139,6 @@ def calc_distance(a, b):
             return 0.5
         else:
             return 2.0
-        
     # do the same for the trained rules, but even lower distances since these were learned, not assumed. - AM
     elif a in newrules.keys():
         if newrules[a] == b:
@@ -97,7 +146,7 @@ def calc_distance(a, b):
         elif b in newrules[a]:
             return 0.25
         else:
-            return 1.0  
+            return 2.0
     # Otherwise, it's not clear, so assign a smaller penalty
     else:
         return 1.0
@@ -290,20 +339,47 @@ for line in f:
     pron = parts[1]
 
     # make ten guesses for every input word
-    while counter < 10:
+    while counter < 1:
         counter += 1
         guess = ""
         for lett in word:
+            
             # instead of only pulling from learned rules, we can rely on some assumed ones first because we trust those - AM
             if lett in baserules.keys():
                 possibles = baserules[lett]
+                # r = random.randrange(len(possibles))
+                r = possibles[random.randrange(len(possibles))]
             else:
-                # otherwise, just use the learned rules. - AM
-                possibles = newrules[lett]
+                # otherwise, if we don't have base rules, use the learned rules. - AM
+                possibles = probs.get(lett, {})
 
-            r = random.randrange(len(possibles))
-            if (possibles[r] != "NULL"):
-                guess = guess + possibles[r] + " "
+                # could try picking mappings weighted by their probabilities.
+                # error drops to around 0.44 - 0.45 when the weights are squared.
+                # currWeights = list(possibles.values())
+                # squaredWeights = [w**2 for w in currWeights]
+
+                # renormalize the weights
+                # total = sum(squaredWeights)
+                # if total > 0:
+                #      squaredWeights = [w/total for w in squaredWeights]
+                
+                # r = random.choices(list(possibles.keys()), weights=squaredWeights, k=1)[0]
+
+                # or get the most likely mapping.
+                # using this approach, error drops down to ~0.39, but all 10 guesses are the same
+                r = max(possibles, key=possibles.get)
+
+            # tried ignoring vowel:consonant mappings entirely.
+            # this had no visible effect on error. - AM
+
+            # letterIsVowel = lett in VOWELS_ENGLISH
+            # phonIsVowel = r in VOWELS_ARPABET
+
+            # if letterIsVowel and letterIsVowel != phonIsVowel:
+            #     continue
+
+            if (r != "NULL"):
+                guess = guess + r + " "
     
         if verbose == 1:
             print (line),
