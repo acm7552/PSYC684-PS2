@@ -17,16 +17,19 @@ from huggingface_hub import login
 import os
 import evaluate
 import numpy as np
-import torch_directml
+import soundfile
+import librosa
+# import torch_directml
 
 # For AMD: Initialize the DirectML device object
 # For NVIDIA: Replace with CUDA
-dml = torch_directml.device()
+# dml = torch_directml.device()
 
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 # Define the token and model ID. Replace 'INSERT_HF_TOKEN' with your token after creating HF account and gaining access to eka-medical-asr-evaluation-dataset
-hf_token = 'INSERT_HF_TOKEN'
-model_id = "openai/whisper-large-v3"
+hf_token = 'token'
+model_id = "openai/whisper-tiny"
 
 
 # Custom Data Collator for ASR Data. Based on transformers DataCollatorSpeechSeq2SeqWithPadding
@@ -92,25 +95,35 @@ if __name__ == '__main__':
     model = WhisperForConditionalGeneration.from_pretrained(
         model_id
     )
-    model.to(dml)
+    model.to(device)
 
 
     sampling_rate = 16000
 
     # Prepare dataset for training
     def prepare_dataset(batch, processor):
-        # Load audio
-        audio = batch["audio"]
+        # Manually read audio file using soundfile (instead of torchcodec)
+        audio_path = batch["audio_path"]
+        audio, sr = soundfile.read(audio_path)
+        
+        if sr != 16000:
+            audio = librosa.resample(audio, orig_sr=sr, target_sr=16000)
+            sr = 16000
 
-        # Compute log-Mel spectrogram and input features
         batch["input_features"] = processor.feature_extractor(
-            audio["array"], sampling_rate=audio["sampling_rate"]
+            audio, sampling_rate=sr
         ).input_features[0]
 
-        # Encode transcripts
         batch["labels"] = processor.tokenizer(batch["text"]).input_ids
         return batch
 
+    # Disable automatic decoding that requires torchcodec
+    for split in dataset:
+        dataset[split] = dataset[split].add_column(
+            "audio_path", [ex["audio"]["path"] for ex in dataset[split]]
+        )
+        dataset[split] = dataset[split].remove_columns(["audio"])
+    
     # Apply preprocessing to all splits concurrently
     dataset = dataset.map(
         prepare_dataset,
@@ -170,7 +183,7 @@ if __name__ == '__main__':
         save_steps=200,
         do_train=True,
         do_eval=True,
-        fp16=False, # For NVIDIA: Set to true
+        fp16=True, # For NVIDIA: Set to true
         load_best_model_at_end=True,
         metric_for_best_model="wer",
         greater_is_better=False,
@@ -197,7 +210,7 @@ if __name__ == '__main__':
 
     # Load base model fully
     # For NVIDIA: switch dml to 'auto' (I think)
-    base_model = WhisperForConditionalGeneration.from_pretrained(model_id).to(dml)
+    base_model = WhisperForConditionalGeneration.from_pretrained(model_id).to(device)
 
     # Load adapter weights
     lora_model = PeftModel.from_pretrained(base_model, "./whisper-medical-finetuned-adapter")
