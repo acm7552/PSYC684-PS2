@@ -1,5 +1,9 @@
 # native
 import sys
+import requests
+import base64
+import os
+
 
 def google_synthesize_text(input_text, text_file):
     """Synthesizes speech from the input string of text.
@@ -60,14 +64,34 @@ def elevenlabs_synthesize_text(input_text, text_file, key):
         wavf.writeframes(pcm_bytes)
         
 
-def THIRD_TTS_PLACEHOLDER():
+def inworld(input_text, text_file):
     """Call third commercial TTS API and save output."""
-    pass
+
+    url = "https://api.inworld.ai/tts/v1/voice"
+
+    headers = {
+        "Authorization": f"Basic Qlh1N1ZkSXdka1poRzhTNXZUQVRabzZnV2NJN3FuNHA6Szkwd0pRVFh6eDdST203R0hWellKdG1jSmhOaXpleExmQzlRemFEa09teklWTDk4Z2k2RGJ6ZnE5UEk2elRtUg==",
+        "Content-Type": "application/json"
+    }
+
+    payload = {
+        "text": input_text,
+        "voiceId": "Ashley",
+        "modelId": "inworld-tts-1"
+    }
+
+    response = requests.post(url, json=payload, headers=headers)
+    response.raise_for_status()
+    result = response.json()
+    audio_content = base64.b64decode(result['audioContent'])
+
+    with open(f"{text_file}_inworld.wav", "wb") as f:
+        f.write(audio_content)
 
 
 def main():
-    if len(sys.argv) > 4:
-        print("Usage: python tts.py <text_file.txt> <google | eleven | third option> [optional API key]")
+    if len(sys.argv) != 4:
+        print("Usage: python script.py <text_file.txt> <google | eleven | third option> [optional API key]")
         sys.exit(1)
 
     # read args
@@ -84,8 +108,8 @@ def main():
         google_synthesize_text(input_text, text_file)
     elif cloud_service == "eleven":
         elevenlabs_synthesize_text(input_text, text_file, sys.argv[3])
-    elif cloud_service == "placeholder":
-        return
+    elif cloud_service == "inworld":
+        inworld(input_text, text_file)
 
 
 if __name__=="__main__":
