@@ -66,8 +66,8 @@ def THIRD_TTS_PLACEHOLDER():
 
 
 def main():
-    if len(sys.argv) != 4:
-        print("Usage: python script.py <text_file.txt> <google | eleven | third option> [optional API key]")
+    if len(sys.argv) > 4:
+        print("Usage: python tts.py <text_file.txt> <google | eleven | third option> [optional API key]")
         sys.exit(1)
 
     # read args
