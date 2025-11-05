@@ -190,6 +190,6 @@ if __name__ == '__main__':
     print("\n" + "=" * 60)
     print("ASR Model Performance Comparison")
     print("=" * 60)
-    print(f"1. Fine-Tuned Whisper Large-v3 WER: {FINETUNED_WER:.4f}")
-    print(f"2. Baseline {BASE_MODEL_ID} WER: {metrics['eval_wer']:.4f}")
+    print(f"Baseline {BASE_MODEL_ID} WER: {metrics['eval_wer']:.4f}")
+    print(f"Fine-Tuned openai/whisper-tiny WER: {FINETUNED_WER:.4f}")
     print("-" * 60)
