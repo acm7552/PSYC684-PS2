@@ -1,19 +1,15 @@
-It is highly recommended to create a new Conda environment when fine-tuning. To do so, run the following:
+It is highly recommended to create a new Conda environment based on the environment.yml file provided when fine-tuning. To do so, download environment.yml, and from its download folder, run the following:
 
-`conda create -n env-name python=3.10`
+`conda env create -f environment.yml`
 
-`conda activate env-name`
+`conda activate whisper-ft-new`
 
-To install the necessary libraries:
-
-`conda install -c conda-forge pytorch torchaudio pyarrow ffmpeg -y`
-
-`pip install transformers datasets accelerate peft bitsandbytes evaluate`
-
-`pip install torch-directml librosa soundfile`
-
-`pip install -U transformers peft datasets evaluate huggingface_hub`
-
-Once the proper dependencies have been installed, to train a model, run:
+Once the environment has been installed, to train a model, run:
 
 `python finetune_asr.py`
+
+In order to compare the performance of the fine-tuned model with the baseline, run:
+
+`python evaluate_baseline.py`
+
+NOTE: WER for fine-tuned model is manually inserted for this file. If a new model has been fine-tuned, please change the FINETUNED_WER variable in the code.
