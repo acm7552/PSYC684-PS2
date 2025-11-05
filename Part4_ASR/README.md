@@ -1,4 +1,4 @@
-It is highly recommended to create a new Conda environment based on the environment.yml file providedwhen fine-tuning. To do so, run the following:
+It is highly recommended to create a new Conda environment based on the environment.yml file provided when fine-tuning. To do so, download environment.yml, and from its download folder, run the following:
 
 `conda env create -f environment.yml`
 
