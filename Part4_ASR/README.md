@@ -13,3 +13,7 @@ In order to compare the performance of the fine-tuned model with the baseline, r
 `python evaluate_baseline.py`
 
 NOTE: WER for fine-tuned model is manually inserted for this file. If a new model has been fine-tuned, please change the FINETUNED_WER variable in the code.
+
+Audio Sample Transcription can be done using inference.py with the audio file as a command argument, as seen below:
+
+`python inference.py <audio-file>`
