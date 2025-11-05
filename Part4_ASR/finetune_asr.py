@@ -1,7 +1,7 @@
 # Harry Hennessy, Jack Mclaughlin, Sophia Caruana, Andrew Murphy
 # PSYC 684
 #
-# This file loads the OpenAI Whisper Large v3 model and the eka-medical-asr-evaluation-dataset, fine-tuning the Whisper model on medical data.
+# This file loads the OpenAI Whisper Tiny model and the eka-medical-asr-evaluation-dataset, fine-tuning the Whisper model on medical data.
 # Once pre-trained, the model should perform better on ASR tasks involving medical vocabulary
 # Currently configured for training using Torch's Direct ML for AMD GPUs. Instructions are left for converting for NVIDIA usage -H
 from datasets import load_dataset, DatasetDict
@@ -28,7 +28,7 @@ dml = torch_directml.device()
 
 
 # Define the token and model ID. Replace 'INSERT_HF_TOKEN' with your token after creating HF account and gaining access to eka-medical-asr-evaluation-dataset
-hf_token = 'YOUR_TOKEN_HERE'
+hf_token = 'INSERT_HF_TOKEN'
 model_id = "openai/whisper-tiny"
 wer_metric = evaluate.load("wer")
 
@@ -156,7 +156,7 @@ if __name__ == '__main__':
 
     # Altered to avoid CPU/memory bottleneck!
     def compute_metrics(pred):
-        # Assumes your preprocess_logits_for_metrics returns a PyTorch tensor, converting it to a NumPy array.
+        # Assumes preprocess_logits_for_metrics returns a PyTorch tensor, converting it to a NumPy array.
         pred_ids = pred.predictions[0] 
         label_ids = pred.label_ids
 
@@ -229,7 +229,12 @@ if __name__ == '__main__':
 
     # Merge adapter weights into base model for deployment and further evaluation
     merged_model = lora_model.merge_and_unload()
+    
+    # Move the model to CPU
+    merged_model = merged_model.to('cpu') 
+    
     merged_model.save_pretrained("./whisper-medical-merged-model")
+    
     processor.save_pretrained("./whisper-medical-merged-model")
 
     print("Fine-tuning complete. Merged model should be saved in: ./whisper-medical-merged-model")
