@@ -15,6 +15,9 @@ from peft import LoraConfig, PeftModel
 import torch
 from huggingface_hub import login
 import os
+# Should prevent crashing!
+os.environ["NUMEXPR_NUM_THREADS"] = "2"
+os.environ["OMP_NUM_THREADS"] = "2"
 import evaluate
 import numpy as np
 import torch_directml
@@ -25,9 +28,9 @@ dml = torch_directml.device()
 
 
 # Define the token and model ID. Replace 'INSERT_HF_TOKEN' with your token after creating HF account and gaining access to eka-medical-asr-evaluation-dataset
-hf_token = 'INSERT_HF_TOKEN'
-model_id = "openai/whisper-large-v3"
-
+hf_token = 'YOUR_TOKEN_HERE'
+model_id = "openai/whisper-tiny"
+wer_metric = evaluate.load("wer")
 
 # Custom Data Collator for ASR Data. Based on transformers DataCollatorSpeechSeq2SeqWithPadding
 class CustomDataCollator:
@@ -53,7 +56,19 @@ class CustomDataCollator:
         batch["labels"] = labels
 
         return batch
-
+# Returns predicted token IDs as a PyTorch tensor, allowing Trainer's internal utilities to handle final conversion to numpy.
+def preprocess_logits_for_metrics(logits, labels):
+    if isinstance(logits, tuple):
+        logits = logits[0]
+        
+    # Apply argmax to get the predicted token IDs
+    pred_ids = torch.argmax(logits, dim=-1)
+    
+    # Move the tensor to CPU memory if it's on a device (DML/CUDA/GPU). Trainer will then handle the final conversion to NumPy inside its loop.
+    pred_ids = pred_ids.cpu()
+    
+    # Returns a tuple of predicted IDs, original labels
+    return pred_ids, labels
 
 # Main block
 if __name__ == '__main__':
@@ -127,7 +142,7 @@ if __name__ == '__main__':
         lora_dropout=0.05,
         bias="none",
     )
-
+    
     # Apply LoRA to model
     model.add_adapter(lora_config)
 
@@ -139,19 +154,28 @@ if __name__ == '__main__':
     # Set evaluation metric to Word Error Rate
     metric = evaluate.load("wer")
 
+    # Altered to avoid CPU/memory bottleneck!
     def compute_metrics(pred):
-        pred_ids = pred.predictions
+        # Assumes your preprocess_logits_for_metrics returns a PyTorch tensor, converting it to a NumPy array.
+        pred_ids = pred.predictions[0] 
         label_ids = pred.label_ids
 
-        # Replace placeholders in labels with the pad token ID
+        # Filter out unexpected negative values
+        pred_ids[pred_ids < 0] = 0
+        
+        # Explicitly cast to 32-bit integer type to satisfy tokenizer backend.
+        pred_ids = pred_ids.astype(np.int32)
+        
+        # replace -100 with the pad token ID
         label_ids[label_ids == -100] = processor.tokenizer.pad_token_id
-
-        # Decode predicted and label IDs
+        
+        # Decode predictions and labels
         pred_str = processor.batch_decode(pred_ids, skip_special_tokens=True)
         label_str = processor.batch_decode(label_ids, skip_special_tokens=True)
 
-        # Compute word error rate
-        wer = 100 * metric.compute(predictions=pred_str, references=label_str)
+        # Compute WER
+        wer = wer_metric.compute(predictions=pred_str, references=label_str)
+
         return {"wer": wer}
 
     # Training arguments
@@ -162,12 +186,12 @@ if __name__ == '__main__':
         per_device_eval_batch_size=8,
         gradient_accumulation_steps=1,
         learning_rate=1e-5,
-        num_train_epochs=3,
+        num_train_epochs=10,
         logging_steps=50,
         eval_strategy="steps",
-        eval_steps=200,
+        eval_steps=100,
         save_strategy="steps",
-        save_steps=200,
+        save_steps=100,
         do_train=True,
         do_eval=True,
         fp16=False, # For NVIDIA: Set to true
@@ -186,6 +210,7 @@ if __name__ == '__main__':
         compute_metrics=compute_metrics,
         train_dataset=dataset["train"],
         eval_dataset=dataset["validation"],
+        preprocess_logits_for_metrics=preprocess_logits_for_metrics,
         data_collator=data_collator,
     )
 
