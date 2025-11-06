@@ -7,7 +7,7 @@ import argparse
 # import pandas as pd
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-DTW_DIR   = os.path.join(BASE_DIR, "DTWdata")   # put directory here, this is just mine
+DTW_DIR   = os.path.join(BASE_DIR, "DTWdata")  
 os.makedirs(DTW_DIR, exist_ok=True)
 
 # directory and file names
