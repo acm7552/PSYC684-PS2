@@ -19,6 +19,9 @@ to compare mystery files to templates only.
 Run in **"\Part3_Grapheme_to_phoneme\\"** directory:  
 `python lett2phon.py`
 
+For the HMM probabilistic version, run:
+`python lett2phon_hmm.py`
+
 ## Part 4
 
 It is highly recommended to create a new Conda environment based on the environment.yml file provided when fine-tuning. To do so, download environment.yml, and from its download folder, run the following:
@@ -48,3 +51,7 @@ Examining audio files in the 'inferences' subdirectory
 To compare to models to a standard out-of-domain test set, use:
 
 `standard_comparison.py`
+
+Results from batch comparison on the MultiMed dataset have also been included and can be viewed in:
+
+`inference_differences.csv`
