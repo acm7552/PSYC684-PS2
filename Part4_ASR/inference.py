@@ -12,8 +12,6 @@ from peft import PeftModel
 
 # Configuration
 device = torch.device("cpu")
-
-# Paths to models
 BASE_MODEL_ID = "openai/whisper-tiny"
 FINETUNED_ADAPTER_PATH = "./whisper-medical-finetuned-adapter"
 MERGED_DIR = "./whisper-medical-merged-model"

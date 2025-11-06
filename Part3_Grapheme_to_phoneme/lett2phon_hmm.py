@@ -340,7 +340,7 @@ for line in f:
     L_0 = word[0]
 
     for p in all_phonemes:
-        # P(P | L_0)
+        # P(Phoneme (P) | L_0)
         # Using log probabilities to avoid underflow
         emission_log_prob = -100.0
         if L_0 in probs and p in probs[L_0]:
@@ -349,7 +349,7 @@ for line in f:
              # Pass NULL, as current framework does not handle NULL values. Proper implementation of NULL probability handling could further reduce error rate
              pass 
         
-        # P(<START> -> P_k)
+        # P(<START> -> current phoneme (P_k))
         transition_log_prob = math.log(transition_probs.get('<START>', {}).get(p, SMOOTHING_VALUE)) 
         
         viterbi_scores[(0, p)] = emission_log_prob + transition_log_prob

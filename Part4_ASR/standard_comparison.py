@@ -36,6 +36,7 @@ def normalize_text(text: str) -> str:
     text = re.sub(r"\s+", " ", text)
     return text.strip()
 
+# Suppress tokens for timestamps if needed
 def get_suppress_tokens(model, processor):
     suppress = []
     if hasattr(model.config, "suppress_tokens") and model.config.suppress_tokens:
@@ -52,7 +53,7 @@ def get_suppress_tokens(model, processor):
         pass
     return list({int(x) for x in suppress if x is not None})
 
-# compute input_features and store tokenized labels.
+# compute input features and store tokenized labels.
 def prepare_dataset(example, processor):
     audio = example["audio"]
     example["input_features"] = processor.feature_extractor(
@@ -93,6 +94,7 @@ def collate_fn(batch, processor, device):
         "raw_texts": text_labels,
     }
 
+# Get tokens from labels
 def decode_labels(labels_tensor, processor):
     labels = labels_tensor.clone().cpu()
     pad_id = processor.tokenizer.pad_token_id or processor.tokenizer.eos_token_id

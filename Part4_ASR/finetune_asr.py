@@ -40,7 +40,7 @@ wer_metric = evaluate.load("wer")
 ADAPTER_DIR = "./whisper-medical-finetuned-adapter"
 MERGED_DIR  = "./whisper-medical-merged-model"
 OUTPUT_DIR  = "./whisper-medical-finetuned"
-RESUME_CKPT = os.path.join(OUTPUT_DIR, "checkpoint-3620") #replace with wherever you want to resume training
+RESUME_CKPT = os.path.join(OUTPUT_DIR, "checkpoint-3620") #replace with wherever you want to resume training, or "" if beginning from scratch
 
 # Custom Data Collator for ASR Data. Based on transformers DataCollatorSpeechSeq2SeqWithPadding
 class CustomDataCollator:
@@ -73,7 +73,7 @@ def preprocess_logits_for_metrics(logits, labels):
     pred_ids = torch.argmax(logits, dim=-1).cpu()
     return pred_ids, labels
 
-# (small helper) normalize text before WER to avoid punctuation/case noise
+# Normalize text before WER to avoid punctuation/case noise
 def _norm_text(s: str) -> str:
     if s is None:
         return ""
@@ -82,7 +82,7 @@ def _norm_text(s: str) -> str:
     s = re.sub(r"\s+", " ", s).strip()
     return s
 
-# Remove optimizer/scheduler state files from a checkpoint so Trainer won’t torch.load() them.
+# Remove optimizer/scheduler state files from a checkpoint so Trainer won’t torch.load() them. (For DML compatibility)
 def _strip_optimizer_files(ckpt_dir: str):
     if not ckpt_dir or not os.path.isdir(ckpt_dir):
         return
@@ -133,7 +133,7 @@ if __name__ == '__main__':
     # Load the dataset
     raw_dataset = load_dataset("ekacare/eka-medical-asr-evaluation-dataset", 'en')
 
-    # Split single test → train/val/test
+    # Split single test into train/val/test
     train_val_split = raw_dataset["test"].train_test_split(test_size=0.2, seed=42)
     val_test_split  = train_val_split["test"].train_test_split(test_size=0.5, seed=42)
 
@@ -224,7 +224,7 @@ if __name__ == '__main__':
 
     # Save best model
     os.makedirs(ADAPTER_DIR, exist_ok=True)
-    trainer.model.save_pretrained(ADAPTER_DIR)   # Saves PEFT adapter deltas
+    trainer.model.save_pretrained(ADAPTER_DIR)
     processor.save_pretrained(ADAPTER_DIR)
     print("Saved adapter to:", ADAPTER_DIR)
 

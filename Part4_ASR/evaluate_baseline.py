@@ -58,7 +58,7 @@ class CustomDataCollator:
         batch["labels"] = labels
         return batch
 
-# -Normalize text for comparison
+# Normalize text for comparison
 def normalize_text(text):
     text = text.lower()
     text = re.sub(r"[^\w\s']", " ", text)
@@ -82,7 +82,7 @@ def compute_metrics(pred):
     # Explicitly cast to 32-bit integer type to satisfy tokenizer backend.
     pred_ids = pred_ids.astype(np.int32)
 
-    # replace -100 with the pad token ID
+    # Replace -100 with the pad token ID
     label_ids = np.where(label_ids == -100, processor.tokenizer.pad_token_id, label_ids)
 
     # Decode predictions and labels
