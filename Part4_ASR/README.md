@@ -25,3 +25,7 @@ Examining audio files in the 'inferences' subdirectory
 To compare to models to a standard out-of-domain test set, use:
 
 `standard_comparison.py`
+
+Results from batch comparison on the MultiMed dataset have also been included and can be viewed in:
+
+`inference_differences.csv`
