@@ -1,9 +1,11 @@
 # Harry Hennessy, Jack Mclaughlin, Sophia Caruana, Andrew Murphy
 # PSYC 684
 #
-# This file loads the OpenAI Whisper Tiny model and the eka-medical-asr-evaluation-dataset, fine-tuning the Whisper model on medical data.
+# This file loads the OpenAI Whisper Tiny model and the eka-medical-asr-evaluation-dataset,
+# fine-tuning the Whisper model on medical data.
 # Once pre-trained, the model should perform better on ASR tasks involving medical vocabulary
 # Currently configured for training using Torch's Direct ML for AMD GPUs. Instructions are left for converting for NVIDIA usage -H
+
 from datasets import load_dataset, DatasetDict
 from transformers import (
     WhisperProcessor,
@@ -11,26 +13,34 @@ from transformers import (
     Seq2SeqTrainingArguments,
     Seq2SeqTrainer,
 )
-from peft import LoraConfig, PeftModel
-import torch
+from peft import LoraConfig, get_peft_model, PeftModel
 from huggingface_hub import login
+import torch
+import torch_directml
+import evaluate
+import numpy as np
+import re
 import os
+import sys
+from packaging import version
+
 # Should prevent crashing!
 os.environ["NUMEXPR_NUM_THREADS"] = "2"
 os.environ["OMP_NUM_THREADS"] = "2"
-import evaluate
-import numpy as np
-import torch_directml
 
 # For AMD: Initialize the DirectML device object
 # For NVIDIA: Replace with CUDA
 dml = torch_directml.device()
 
-
 # Define the token and model ID. Replace 'INSERT_HF_TOKEN' with your token after creating HF account and gaining access to eka-medical-asr-evaluation-dataset
 hf_token = 'INSERT_HF_TOKEN'
 model_id = "openai/whisper-tiny"
 wer_metric = evaluate.load("wer")
+
+ADAPTER_DIR = "./whisper-medical-finetuned-adapter"
+MERGED_DIR  = "./whisper-medical-merged-model"
+OUTPUT_DIR  = "./whisper-medical-finetuned"
+RESUME_CKPT = os.path.join(OUTPUT_DIR, "checkpoint-3620") #replace with wherever you want to resume training
 
 # Custom Data Collator for ASR Data. Based on transformers DataCollatorSpeechSeq2SeqWithPadding
 class CustomDataCollator:
@@ -40,7 +50,7 @@ class CustomDataCollator:
     def __call__(self, features):
         # Pad input features (spectrograms)
         input_features = [{"input_features": feature["input_features"]} for feature in features]
-        batch = self.processor.feature_extractor.pad(input_features, return_tensors="pt")
+        batch = self.processor.feature_extractor.pad(input_features, return_tensors="pt", return_attention_mask=True)
 
         # Pad labels (tokens)
         label_features = [{"input_ids": feature["labels"]} for feature in features]
@@ -54,21 +64,64 @@ class CustomDataCollator:
             labels = labels[:, 1:]
 
         batch["labels"] = labels
-
         return batch
+
 # Returns predicted token IDs as a PyTorch tensor, allowing Trainer's internal utilities to handle final conversion to numpy.
 def preprocess_logits_for_metrics(logits, labels):
     if isinstance(logits, tuple):
         logits = logits[0]
-        
-    # Apply argmax to get the predicted token IDs
-    pred_ids = torch.argmax(logits, dim=-1)
-    
-    # Move the tensor to CPU memory if it's on a device (DML/CUDA/GPU). Trainer will then handle the final conversion to NumPy inside its loop.
-    pred_ids = pred_ids.cpu()
-    
-    # Returns a tuple of predicted IDs, original labels
+    pred_ids = torch.argmax(logits, dim=-1).cpu()
     return pred_ids, labels
+
+# (small helper) normalize text before WER to avoid punctuation/case noise
+def _norm_text(s: str) -> str:
+    if s is None:
+        return ""
+    s = s.replace("’", "'").replace("`", "'").lower()
+    s = re.sub(r"[^\w\s']", " ", s)
+    s = re.sub(r"\s+", " ", s).strip()
+    return s
+
+# Remove optimizer/scheduler state files from a checkpoint so Trainer won’t torch.load() them.
+def _strip_optimizer_files(ckpt_dir: str):
+    if not ckpt_dir or not os.path.isdir(ckpt_dir):
+        return
+    for fname in ("optimizer.pt", "optimizer.bin", "optimizer_state.pt", "scheduler.pt", "scheduler.bin"):
+        fpath = os.path.join(ckpt_dir, fname)
+        if os.path.exists(fpath):
+            try:
+                os.remove(fpath)
+                print(f"Removed: {fpath}")
+            except Exception as e:
+                print(f"Could not remove {fpath}: {e}")
+
+# Prepare dataset for training
+def prepare_dataset(batch, processor):
+    # Load audio
+    audio = batch["audio"]
+    # Compute log-Mel spectrogram and input features
+    batch["input_features"] = processor.feature_extractor(
+        audio["array"], sampling_rate=audio["sampling_rate"]
+    ).input_features[0]
+    # Encode transcripts
+    batch["labels"] = processor.tokenizer(batch["text"]).input_ids
+    return batch
+
+# Set evaluation metric to Word Error Rate
+def build_compute_metrics(processor):
+    def compute_metrics(pred):
+        pred_ids = pred.predictions[0]
+        label_ids = pred.label_ids
+        pred_ids[pred_ids < 0] = 0
+        pred_ids = pred_ids.astype(np.int32)
+        label_ids[label_ids == -100] = processor.tokenizer.pad_token_id
+        pred_str = processor.batch_decode(pred_ids, skip_special_tokens=True)
+        label_str = processor.batch_decode(label_ids, skip_special_tokens=True)
+        pred_str = [_norm_text(s) for s in pred_str]
+        label_str = [_norm_text(s) for s in label_str]
+        wer = wer_metric.compute(predictions=pred_str, references=label_str)
+        return {"wer": wer}
+    return compute_metrics
 
 # Main block
 if __name__ == '__main__':
@@ -80,19 +133,10 @@ if __name__ == '__main__':
     # Load the dataset
     raw_dataset = load_dataset("ekacare/eka-medical-asr-evaluation-dataset", 'en')
 
-    # Split the single test split into new train, validation, and test splits.
-    train_val_split = raw_dataset["test"].train_test_split(
-        test_size=0.2,
-        seed=42
-    )
+    # Split single test → train/val/test
+    train_val_split = raw_dataset["test"].train_test_split(test_size=0.2, seed=42)
+    val_test_split  = train_val_split["test"].train_test_split(test_size=0.5, seed=42)
 
-    # Further split the test into validation and final test splits
-    val_test_split = train_val_split["test"].train_test_split(
-        test_size=0.5,
-        seed=42
-    )
-
-    # Create the final DatasetDict with custom splits
     dataset = DatasetDict({
         "train": train_val_split["train"],
         "validation": val_test_split["train"],
@@ -102,31 +146,26 @@ if __name__ == '__main__':
     # Load processor and model
     processor = WhisperProcessor.from_pretrained(model_id)
 
-    # For AMD: Load model on CPU/default first, then manually move to DML
-    # For NVIDIA: Replace with CUDA implementation
-    model = WhisperForConditionalGeneration.from_pretrained(
-        model_id
+    base_model = WhisperForConditionalGeneration.from_pretrained(model_id)
+    base_model.to(dml)
+
+    # Apply LoRA
+    lora_config = LoraConfig(
+        r=32,
+        lora_alpha=64,
+        target_modules=["q_proj", "v_proj"],
+        lora_dropout=0.05,
+        bias="none",
+        task_type="SEQ_2_SEQ_LM",
     )
-    model.to(dml)
+    model = get_peft_model(base_model, lora_config)
 
+    # Print trainable parameter summary
+    trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
+    total_params = sum(p.numel() for p in model.parameters())
+    print(f"Trainable parameters: {trainable_params}\n All parameters: {total_params}\n Trainable %: {100 * trainable_params / total_params:.2f}")
 
-    sampling_rate = 16000
-
-    # Prepare dataset for training
-    def prepare_dataset(batch, processor):
-        # Load audio
-        audio = batch["audio"]
-
-        # Compute log-Mel spectrogram and input features
-        batch["input_features"] = processor.feature_extractor(
-            audio["array"], sampling_rate=audio["sampling_rate"]
-        ).input_features[0]
-
-        # Encode transcripts
-        batch["labels"] = processor.tokenizer(batch["text"]).input_ids
-        return batch
-
-    # Apply preprocessing to all splits concurrently
+    # Preprocess all splits
     dataset = dataset.map(
         prepare_dataset,
         remove_columns=dataset.column_names["train"],
@@ -134,75 +173,31 @@ if __name__ == '__main__':
         fn_kwargs={"processor": processor}
     )
 
-    # Configure LoRA
-    lora_config = LoraConfig(
-        r=32,
-        lora_alpha=64,
-        target_modules=["q_proj", "v_proj"],
-        lora_dropout=0.05,
-        bias="none",
-    )
-    
-    # Apply LoRA to model
-    model.add_adapter(lora_config)
-
-    # Print trainable parameters
-    trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
-    total_params = sum(p.numel() for p in model.parameters())
-    print(f"Trainable parameters: {trainable_params} \n All parameters: {total_params} \n Trainable %: {100 * trainable_params / total_params:.2f}")
-
-    # Set evaluation metric to Word Error Rate
-    metric = evaluate.load("wer")
-
-    # Altered to avoid CPU/memory bottleneck!
-    def compute_metrics(pred):
-        # Assumes preprocess_logits_for_metrics returns a PyTorch tensor, converting it to a NumPy array.
-        pred_ids = pred.predictions[0] 
-        label_ids = pred.label_ids
-
-        # Filter out unexpected negative values
-        pred_ids[pred_ids < 0] = 0
-        
-        # Explicitly cast to 32-bit integer type to satisfy tokenizer backend.
-        pred_ids = pred_ids.astype(np.int32)
-        
-        # replace -100 with the pad token ID
-        label_ids[label_ids == -100] = processor.tokenizer.pad_token_id
-        
-        # Decode predictions and labels
-        pred_str = processor.batch_decode(pred_ids, skip_special_tokens=True)
-        label_str = processor.batch_decode(label_ids, skip_special_tokens=True)
-
-        # Compute WER
-        wer = wer_metric.compute(predictions=pred_str, references=label_str)
-
-        return {"wer": wer}
-
     # Training arguments
-    # For NVIDIA: Several arguments can be changed to improve performance
     training_args = Seq2SeqTrainingArguments(
-        output_dir="./whisper-medical-finetuned",
+        output_dir=OUTPUT_DIR,
         per_device_train_batch_size=8,
         per_device_eval_batch_size=8,
         gradient_accumulation_steps=1,
         learning_rate=1e-5,
         num_train_epochs=10,
         logging_steps=50,
-        eval_strategy="steps",
+        eval_strategy="steps",         
         eval_steps=100,
         save_strategy="steps",
         save_steps=100,
         do_train=True,
         do_eval=True,
-        fp16=False, # For NVIDIA: Set to true
-        load_best_model_at_end=True,
+        fp16=False,                     # NVIDIA can set True
+        load_best_model_at_end=True,    
         metric_for_best_model="wer",
         greater_is_better=False,
-        push_to_hub=False
+        push_to_hub=False,
+        save_safetensors=True,         
     )
 
-    # Initialize trainer and collator
-    data_collator = CustomDataCollator(processor=processor)
+    data_collator   = CustomDataCollator(processor)
+    compute_metrics = build_compute_metrics(processor)
 
     trainer = Seq2SeqTrainer(
         model=model,
@@ -214,27 +209,32 @@ if __name__ == '__main__':
         data_collator=data_collator,
     )
 
-    # Perform training
-    trainer.train()
+    # Directml workaround
+    # If torch < 2.6, Trainer will refuse to torch.load() optimizer/scheduler due to CVE-2025-32434.
+    # Remove optimizer/scheduler files from the checkpoint so resume only loads model weights.
+    resume_dir = RESUME_CKPT if os.path.isdir(RESUME_CKPT) else None
+    if resume_dir:
+        torch_ver = version.parse(torch.__version__.split("+")[0])
+        if torch_ver < version.parse("2.6"):
+            print(f"Resuming from {resume_dir} on torch {torch.__version__} — stripping optimizer/scheduler to avoid torch.load()")
+            _strip_optimizer_files(resume_dir)
+        trainer.train(resume_from_checkpoint=resume_dir)
+    else:
+        trainer.train()
 
-    # Save adapter weights
-    trainer.save_model("./whisper-medical-finetuned-adapter")
+    # Save best model
+    os.makedirs(ADAPTER_DIR, exist_ok=True)
+    trainer.model.save_pretrained(ADAPTER_DIR)   # Saves PEFT adapter deltas
+    processor.save_pretrained(ADAPTER_DIR)
+    print("Saved adapter to:", ADAPTER_DIR)
 
-    # Load base model fully
-    # For NVIDIA: switch dml to 'auto' (I think)
-    base_model = WhisperForConditionalGeneration.from_pretrained(model_id).to(dml)
+    # Export merged model
+    fresh_base = WhisperForConditionalGeneration.from_pretrained(model_id)
+    lora_loaded = PeftModel.from_pretrained(fresh_base, ADAPTER_DIR)
+    merged_model = lora_loaded.merge_and_unload().to("cpu")
+    os.makedirs(MERGED_DIR, exist_ok=True)
+    merged_model.save_pretrained(MERGED_DIR)
+    processor.save_pretrained(MERGED_DIR)
+    print("Merged model saved in:", MERGED_DIR)
 
-    # Load adapter weights
-    lora_model = PeftModel.from_pretrained(base_model, "./whisper-medical-finetuned-adapter")
-
-    # Merge adapter weights into base model for deployment and further evaluation
-    merged_model = lora_model.merge_and_unload()
-    
-    # Move the model to CPU
-    merged_model = merged_model.to('cpu') 
-    
-    merged_model.save_pretrained("./whisper-medical-merged-model")
-    
-    processor.save_pretrained("./whisper-medical-merged-model")
-
-    print("Fine-tuning complete. Merged model should be saved in: ./whisper-medical-merged-model")
+    print("Fine-tuning complete.")

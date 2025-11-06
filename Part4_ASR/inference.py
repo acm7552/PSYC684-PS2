@@ -1,7 +1,7 @@
 # Harry Hennessy, Jack Mclaughlin, Sophia Caruana, Andrew Murphy
 # PSYC 684
 #
-# This file loads the OpenAI Whisper Tiny model, the fine tuned mode, and an audio file specified in the arguments
+# This file loads the OpenAI Whisper Tiny model, the fine tuned model, and an audio file specified in the arguments
 # Once loaded, the inference from both models is printed
 import torch
 import argparse
@@ -16,6 +16,7 @@ device = torch.device("cpu")
 # Paths to models
 BASE_MODEL_ID = "openai/whisper-tiny"
 FINETUNED_ADAPTER_PATH = "./whisper-medical-finetuned-adapter"
+MERGED_DIR = "./whisper-medical-merged-model"
 
 # Loads an audio file and resamples it to 16000 Hz (Whisper's required rate).
 def load_audio_file(file_path):
@@ -76,9 +77,7 @@ def main(audio_file_path):
     print("\nBaseline Model loaded to CPU.")
 
     # Load fine tuned model
-    finetuned_model = WhisperForConditionalGeneration.from_pretrained(BASE_MODEL_ID).to(device)
-    finetuned_model = PeftModel.from_pretrained(finetuned_model, FINETUNED_ADAPTER_PATH)
-    finetuned_model = finetuned_model.merge_and_unload() 
+    finetuned_model = WhisperForConditionalGeneration.from_pretrained(MERGED_DIR).to(device)
     print(f"\nFine-Tuned Model loaded and merged to CPU.")
 
     # Audio Loading
